@@ -64,6 +64,7 @@ static float g_last_scale;
 static int g_vsync;
 static GLuint g_tex;
 static bool g_flip_req;
+extern "C" { bool g_test_hud_visible; } /* TEST ONLY */
 
 
 static void InitializeStyle()
@@ -193,6 +194,22 @@ void xemu_hud_update(void)
 {
     ImGuiIO& io = ImGui::GetIO();
     uint32_t now = SDL_GetTicks();
+
+    /* TEST ONLY: XEMU_TEST_MENU_AT=<s> opens the main menu, XEMU_TEST_PAUSE_AT=<s> pauses the guest */
+    {
+        static bool menu_done, pause_done;
+        const char *m = getenv("XEMU_TEST_MENU_AT"), *pz = getenv("XEMU_TEST_PAUSE_AT");
+        if (m && !menu_done && now >= (uint32_t)atoi(m) * 1000) {
+            g_scene_mgr.PushScene(g_main_menu);
+            menu_done = true;
+            fprintf(stderr, "TEST menu opened at %u ms\n", now);
+        }
+        if (pz && !pause_done && now >= (uint32_t)atoi(pz) * 1000) {
+            ActionTogglePause();
+            pause_done = true;
+            fprintf(stderr, "TEST guest paused at %u ms\n", now);
+        }
+    }
 
     g_viewport_mgr.Update();
     g_font_mgr.Update();
@@ -326,6 +343,7 @@ void xemu_hud_render()
 {
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    g_test_hud_visible = ImGui::GetDrawData()->TotalVtxCount > 0; /* TEST ONLY */
 
     if (g_vsync != g_config.display.window.vsync) {
         g_vsync = g_config.display.window.vsync;

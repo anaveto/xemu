@@ -739,9 +739,13 @@ static void update_fps(void)
     fps = 1000.0/avg;
 }
 
+static int st_vblanks; /* TEST ONLY */
+extern bool g_test_hud_visible; /* TEST ONLY */
+
 static void process_vblank(struct xemu_console *scon)
 {
     assert(bql_locked());
+    st_vblanks++;
 
     update_fps();
 
@@ -906,6 +910,25 @@ static void gl_render_frame(struct xemu_console *scon)
     /* The DXGI presenter has begun the frame, so it ends it */
     present = present || win32_dxgi_present_is_active();
 #endif
+
+    /* TEST ONLY: per-second counts (XEMU_PRESENT_STATS=1) */
+    if (getenv("XEMU_PRESENT_STATS")) {
+        static int st_flip, st_stale, st_vga, st_on, st_skip, st_hud;
+        static int64_t st_t;
+        int64_t t = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
+        if (g_test_hud_visible) st_hud++;
+        if (!present) st_skip++;
+        else if (release_surface_texture) st_vga++;
+        else if (!g_config.display.window.present_only_new_frames) st_on++;
+        else if (flips != presented_flips) st_flip++;
+        else st_stale++;
+        if (t - st_t >= 1000) {
+            fprintf(stderr, "PRESENT_STATS flips %u flip %d stale %d vga %d option-off %d skipped %d hud-passes %d vblanks %d\n",
+                    flips, st_flip, st_stale, st_vga, st_on, st_skip, st_hud, st_vblanks);
+            st_flip = st_stale = st_vga = st_on = st_skip = st_hud = st_vblanks = 0;
+            st_t = t;
+        }
+    }
 
     if (!present) {
         /* Wait for the next guest frame instead of the vertical refresh */
