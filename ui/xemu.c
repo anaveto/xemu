@@ -830,6 +830,10 @@ static void gl_render_frame(struct xemu_console *scon)
     bool flip_required = false;
     bool release_surface_texture = false;
 
+    static unsigned int presented_flips;
+    static int64_t last_flip_ms;
+    unsigned int flips = nv2a_wait_for_flip(presented_flips, 0);
+
     /* XXX: Note that this bypasses the usual VGA path in order to quickly
      * get the surface. This is simple and fast, at the cost of accuracy.
      * Ideally, this should go through the VGA code and opportunistically pull
@@ -883,6 +887,34 @@ static void gl_render_frame(struct xemu_console *scon)
     }
 
     nv2a_release_framebuffer_surface();
+
+    /*
+     * Present only when the guest flipped, so that the host frame rate is the
+     * guest frame rate. The HUD, the VGA path and guests that stop flipping
+     * for over 500 ms are presented every time.
+     */
+    bool present = true;
+    if (g_config.display.window.present_only_new_frames &&
+        !release_surface_texture) {
+        int64_t now = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
+        if (flips != presented_flips) {
+            last_flip_ms = now;
+        }
+        present = flips != presented_flips || xemu_hud_is_visible() ||
+                  now - last_flip_ms > 500;
+    }
+#ifdef _WIN32
+    /* The DXGI presenter has begun the frame, so it ends it */
+    present = present || win32_dxgi_present_is_active();
+#endif
+
+    if (!present) {
+        /* Wait for the next guest frame instead of the vertical refresh */
+        nv2a_wait_for_flip(flips, 16);
+        qatomic_set(&rendering, false);
+        return;
+    }
+    presented_flips = flips;
 
 #ifdef _WIN32
     if (win32_dxgi_present_is_active()) {

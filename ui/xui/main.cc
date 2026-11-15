@@ -63,6 +63,7 @@ static ImGuiStyle g_base_style;
 static float g_last_scale;
 static int g_vsync;
 static GLuint g_tex;
+static bool g_hud_visible;
 static bool g_flip_req;
 
 
@@ -174,6 +175,11 @@ void xemu_hud_process_sdl_events(SDL_Event *event)
     }
 
     ImGui_ImplSDL3_ProcessEvent(event);
+}
+
+bool xemu_hud_is_visible(void)
+{
+    return g_hud_visible;
 }
 
 void xemu_hud_should_capture_kbd_mouse(int *kbd, int *mouse)
@@ -326,6 +332,7 @@ void xemu_hud_render()
 {
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    g_hud_visible = ImGui::GetDrawData()->TotalVtxCount > 0;
 
     if (g_vsync != g_config.display.window.vsync) {
         g_vsync = g_config.display.window.vsync;
