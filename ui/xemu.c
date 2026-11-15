@@ -908,6 +908,25 @@ static void gl_render_frame(struct xemu_console *scon)
     present = present || win32_dxgi_present_is_active();
 #endif
 
+    /* TEST ONLY: per-second counts of presents by reason (XEMU_PRESENT_STATS=1) */
+    static int st_flip, st_hud, st_stale, st_vga, st_skip, st_on;
+    static int64_t st_t;
+    if (getenv("XEMU_PRESENT_STATS")) {
+        int64_t t = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
+        if (!present) st_skip++;
+        else if (release_surface_texture) st_vga++;
+        else if (!g_config.display.window.present_only_new_frames) st_on++;
+        else if (flips != presented_flips) st_flip++;
+        else if (xemu_hud_is_visible()) st_hud++;
+        else st_stale++;
+        if (t - st_t >= 1000) {
+            fprintf(stderr, "PRESENT_STATS flips %u flip %d hud %d stale %d vga %d option-off %d skipped %d\n",
+                    flips, st_flip, st_hud, st_stale, st_vga, st_on, st_skip);
+            st_flip = st_hud = st_stale = st_vga = st_on = st_skip = 0;
+            st_t = t;
+        }
+    }
+
     if (!present) {
         /* Wait for the next guest frame instead of the vertical refresh */
         nv2a_wait_for_flip(flips, 16);
