@@ -215,6 +215,14 @@ void xemu_hud_update(void)
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
     io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
     g_input_mgr.Update();
+    {
+        static uint32_t fs_last_buttons;
+        uint32_t b = g_input_mgr.CombinedButtons();
+        if (b & ~fs_last_buttons) {
+            xemu_hud_fs_press_ms = SDL_GetTicks();
+        }
+        fs_last_buttons = b;
+    }
 
     ImGui::NewFrame();
     ProcessKeyboardShortcuts();
@@ -321,6 +329,14 @@ void xemu_hud_update(void)
     // static bool show_demo = true;
     // if (show_demo) ImGui::ShowDemoWindow(&show_demo);
 }
+
+int xemu_hud_fs_vertices(void)
+{
+    ImDrawData *dd = ImGui::GetDrawData();
+    return dd ? dd->TotalVtxCount : 0;
+}
+
+int64_t xemu_hud_fs_press_ms;
 
 bool xemu_hud_render()
 {
