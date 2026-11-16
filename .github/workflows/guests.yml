@@ -24,11 +24,13 @@ jobs:
       - name: Build guests
         run: |
           eval $(nxdk/bin/activate -s)
-          for g in flip250 vramcrtc updpaths; do make -C $g -j$(nproc); done
-          ls -l */bin */*.iso
+          mkdir out
+          for g in vramcrtc updpaths; do for n in 1 2 3 4; do
+            make -C $g -j$(nproc) ONLY_PHASE=$n XBE_TITLE=$g$n && cp $g/$g$n.iso out/ && make -C $g clean >/dev/null
+          done; done
+          for g in flip250 vramcrtc updpaths; do make -C $g -j$(nproc) && cp $g/$g.iso out/; done
+          ls -l out
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: test-guests
-          path: |
-            */*.iso
-            */bin/default.xbe
+          path: out/*.iso

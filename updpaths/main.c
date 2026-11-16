@@ -21,6 +21,11 @@
 #define BAND_H 80
 #define BAND_Y (H / 2 - BAND_H / 2)
 #define PHASE_VBL 1200
+/* make ONLY_PHASE=n: phase n only, forever (an ES-DE entry per phase) */
+#ifndef ONLY_PHASE
+#define ONLY_PHASE 0
+#endif
+#define LIM(k) (ONLY_PHASE == 0 ? PHASE_VBL : ONLY_PHASE == (k) ? 0xFFFFFFF0u : 0)
 #define REG(x) (*(volatile DWORD *)(0xFD000000 + (x)))
 #define CRTC_START REG(0x600800)
 #define PVIDEO_BUFFER REG(0x8700)
@@ -127,7 +132,7 @@ int main(void)
     PVIDEO_POINT_OUT = 160 | ((BAND_Y - 20) << 16);
     PVIDEO_SIZE_OUT = OV_W | (OV_H << 16);
     PVIDEO_FORMAT = (OV_W * 2) | (1 << 16);
-    for (unsigned int v = 0, n = 0; v < PHASE_VBL; v += 2, n++) {
+    for (unsigned int v = 0, n = 0; v < LIM(1); v += 2, n++) {
         DWORD *back = ov[n & 1];
         overlay_frame(back, (n * 8) % (OV_W - 20));
         wait_vbl(2);
@@ -140,7 +145,7 @@ int main(void)
     /* 2: NV09F blit of a CPU-drawn band into the shown surface */
     pgraph_frame(0, -1, 0, "updpaths 2: NV09F blit into the shown surface, 30/s", 0);
     DWORD *band = alloc_contig(W * 4 * BAND_H);
-    for (unsigned int v = 0, n = 0; v < PHASE_VBL; v += 2, n++) {
+    for (unsigned int v = 0, n = 0; v < LIM(2); v += 2, n++) {
         cpu_band(band, W, (n * 8) % (W - 40), 0xff00c0c0);
         wait_vbl(2);
         pb_reset();
@@ -160,7 +165,7 @@ int main(void)
 
     /* 3: CPU writes into the shown, PGRAPH-rendered surface */
     pgraph_frame(0, -1, 0, "updpaths 3: CPU writes into the shown surface, 30/s", 0);
-    for (unsigned int v = 0, n = 0; v < PHASE_VBL; v += 2, n++) {
+    for (unsigned int v = 0, n = 0; v < LIM(3); v += 2, n++) {
         wait_vbl(2);
         cpu_band(shown + BAND_Y * pitch_px, pitch_px, (n * 8) % (W - 40), 0xffc000c0);
     }

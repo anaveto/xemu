@@ -15,6 +15,11 @@
 #define W 640
 #define H 480
 #define PHASE_VBL 1200
+/* make ONLY_PHASE=n: phase n only, forever (an ES-DE entry per phase) */
+#ifndef ONLY_PHASE
+#define ONLY_PHASE 0
+#endif
+#define LIM(k) (ONLY_PHASE == 0 ? PHASE_VBL : ONLY_PHASE == (k) ? 0xFFFFFFF0u : 0)
 #define CRTC_START (*(volatile DWORD *)0xFD600800)
 
 static void cpu_frame(DWORD *fb, int x, DWORD bar)
@@ -54,7 +59,7 @@ int main(void)
     /* 1: CPU, one buffer */
     DWORD *fb0 = (DWORD *)XVideoGetFB();
     CRTC_START = (DWORD)fb0 & 0x03FFFFFF;
-    for (unsigned int v = 0, n = 0; v < PHASE_VBL; v += 2, n++) {
+    for (unsigned int v = 0, n = 0; v < LIM(1); v += 2, n++) {
         pb_wait_for_vbl();
         pb_wait_for_vbl();
         cpu_frame(fb0, (n * 8) % (W - 40), 0xffff0000);
@@ -64,7 +69,7 @@ int main(void)
     DWORD *fb1 = MmAllocateContiguousMemoryEx(W * H * 4, 0, 0x03FFAFFF, 0x1000,
                                               PAGE_READWRITE | PAGE_WRITECOMBINE);
     DWORD *cpu_buf[2] = { fb0, fb1 };
-    for (unsigned int v = 0, n = 0; v < PHASE_VBL; v += 3, n++) {
+    for (unsigned int v = 0, n = 0; v < LIM(2); v += 3, n++) {
         DWORD *back = cpu_buf[(n + 1) & 1];
         cpu_frame(back, (n * 12) % (W - 40), 0xff00ff00);
         pb_wait_for_vbl();
@@ -76,7 +81,7 @@ int main(void)
 
     /* 3: PGRAPH into the displayed buffer, no flip */
     CRTC_START = (DWORD)pb_extra_buffer(0) & 0x03FFFFFF;
-    for (unsigned int v = 0, n = 0; v < PHASE_VBL; v += 2, n++) {
+    for (unsigned int v = 0, n = 0; v < LIM(3); v += 2, n++) {
         pb_wait_for_vbl();
         pb_wait_for_vbl();
         pgraph_frame(0, (n * 8) % (W - 40), 0xff4060ff, "vramcrtc 3: PGRAPH, one buffer, no flip", n);
