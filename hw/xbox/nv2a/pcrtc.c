@@ -71,7 +71,9 @@ void pcrtc_write(void *opaque, hwaddr addr, uint64_t val, unsigned int size)
         if (val != d->pcrtc.start) {
             qatomic_inc(&nv2a_fs_startc);
             d->pcrtc.start = val;
-            pgraph_count_flip(d, true);
+            if (!getenv("XEMU_FS_NO_CRTC")) { /* test only: PR as opened */
+                pgraph_count_flip(d, true);
+            }
         }
 
         NV2A_DPRINTF("PCRTC_START - %x %x %x %x\n",
