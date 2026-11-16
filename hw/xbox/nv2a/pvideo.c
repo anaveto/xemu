@@ -57,6 +57,7 @@ void pvideo_write(void *opaque, hwaddr addr, uint64_t val, unsigned int size)
 
     switch (addr) {
     case NV_PVIDEO_BUFFER:
+        qatomic_inc(&nv2a_fs_pvb);
         d->pvideo.regs[addr] = val;
         // d->vga.enable_overlay = true;
         pvideo_vga_invalidate(d);

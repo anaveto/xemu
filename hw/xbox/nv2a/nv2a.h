@@ -27,6 +27,8 @@ int nv2a_get_framebuffer_surface(void);
 void nv2a_release_framebuffer_surface(void);
 unsigned int nv2a_wait_for_flip(unsigned int count, int timeout_ms);
 unsigned int nv2a_get_scanout_writes(void);
+/* Test only (flipstats): guest display events */
+extern unsigned int nv2a_fs_inc, nv2a_fs_startw, nv2a_fs_startc, nv2a_fs_pvb;
 void nv2a_set_surface_scale_factor(unsigned int scale);
 unsigned int nv2a_get_surface_scale_factor(void);
 const uint8_t *nv2a_get_dac_palette(void);

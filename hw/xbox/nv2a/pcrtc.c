@@ -21,6 +21,8 @@
 
 #include "nv2a_int.h"
 
+unsigned int nv2a_fs_inc, nv2a_fs_startw, nv2a_fs_startc, nv2a_fs_pvb;
+
 uint64_t pcrtc_read(void *opaque, hwaddr addr, unsigned int size)
 {
     NV2AState *d = (NV2AState *)opaque;
@@ -65,7 +67,9 @@ void pcrtc_write(void *opaque, hwaddr addr, uint64_t val, unsigned int size)
     case NV_PCRTC_START:
         val &= 0x07FFFFFF;
         // assert(val < memory_region_size(d->vram));
+        qatomic_inc(&nv2a_fs_startw);
         if (val != d->pcrtc.start) {
+            qatomic_inc(&nv2a_fs_startc);
             d->pcrtc.start = val;
             pgraph_count_flip(d, true);
         }
