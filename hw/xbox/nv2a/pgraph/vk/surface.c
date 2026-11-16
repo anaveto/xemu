@@ -1383,6 +1383,7 @@ static void populate_surface_binding_target_sized(NV2AState *d, bool color,
     target->upload_pending = true;
     target->download_pending = false;
     target->draw_dirty = false;
+    target->writes = 0;
     target->dma_addr = dma.address;
     target->dma_len = dma.limit;
     target->frame_time = pg->frame_time;

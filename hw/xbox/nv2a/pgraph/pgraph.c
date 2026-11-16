@@ -417,6 +417,11 @@ void pgraph_count_flip(NV2AState *d, bool start_changed)
     qemu_mutex_unlock(&pg->flip_lock);
 }
 
+unsigned int nv2a_get_scanout_writes(void)
+{
+    return g_nv2a->pgraph.scanout_writes;
+}
+
 unsigned int nv2a_wait_for_flip(unsigned int count, int timeout_ms)
 {
     PGRAPHState *pg = &g_nv2a->pgraph;
