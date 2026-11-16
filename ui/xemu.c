@@ -831,7 +831,7 @@ static void gl_render_frame(struct xemu_console *scon)
     bool release_surface_texture = false;
 
     static unsigned int presented_flips;
-    static int64_t last_flip_ms;
+    static unsigned int presented_writes;
     unsigned int flips = nv2a_wait_for_flip(presented_flips, 0);
 
     /* XXX: Note that this bypasses the usual VGA path in order to quickly
@@ -845,6 +845,7 @@ static void gl_render_frame(struct xemu_console *scon)
      * to the framebuffer, fall back to the VGA path.
      */
     GLuint tex = nv2a_get_framebuffer_surface();
+    unsigned int writes = nv2a_get_scanout_writes();
 
     ASSERT_NO_GL_ERROR();
 
@@ -889,19 +890,30 @@ static void gl_render_frame(struct xemu_console *scon)
     nv2a_release_framebuffer_surface();
 
     /*
-     * Present only when the guest flipped, so that the host frame rate is the
-     * guest frame rate. Every frame is presented while the UI shows, on the
-     * VGA path, and when the guest has not flipped for over 500 ms.
+     * Present only new guest frames, so that the host frame rate is the guest
+     * frame rate. As in PCSX2, the signal of a new frame for the next 500 ms
+     * comes from the last 500 ms: guest flips, else draws into the shown
+     * surface, else every frame is new. Every frame is presented while the UI
+     * shows and on the VGA path.
      */
     bool present = true;
     if (g_config.display.window.present_only_new_frames &&
         !release_surface_texture) {
+        static enum { NEW_FRAME_ALWAYS, NEW_FRAME_FLIPS, NEW_FRAME_WRITES } signal;
+        static unsigned int window_flips, window_writes;
+        static int64_t window_end_ms;
         int64_t now = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
-        if (flips != presented_flips) {
-            last_flip_ms = now;
+        if (now >= window_end_ms) {
+            signal = flips != window_flips   ? NEW_FRAME_FLIPS :
+                     writes != window_writes ? NEW_FRAME_WRITES :
+                                               NEW_FRAME_ALWAYS;
+            window_flips = flips;
+            window_writes = writes;
+            window_end_ms = now + 500;
         }
-        present = ui_visible || flips != presented_flips ||
-                  now - last_flip_ms > 500;
+        present = ui_visible || signal == NEW_FRAME_ALWAYS ||
+                  (signal == NEW_FRAME_FLIPS ? flips != presented_flips :
+                                               writes != presented_writes);
     }
 
     if (!present) {
@@ -917,6 +929,7 @@ static void gl_render_frame(struct xemu_console *scon)
         return;
     }
     presented_flips = flips;
+    presented_writes = writes;
 
 #ifdef _WIN32
     if (win32_dxgi_present_is_active()) {
