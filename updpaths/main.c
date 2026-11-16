@@ -9,6 +9,8 @@
  *  3 CPU:     CPU writes the band straight into the shown surface
  *  4 switch:  PGRAPH flips by PCRTC_START at 4 a second for 10 s, then PGRAPH
  *             draws into the shown buffer 30 times a second for 10 s; repeats
+ *  5 hold:    (ONLY_PHASE=5 only) PGRAPH flips by PCRTC_START at 4 a second and
+ *             draws into the shown buffer 30 times a second between the flips
  */
 #include <hal/debug.h>
 #include <hal/video.h>
@@ -116,6 +118,18 @@ int main(void)
     }
     DWORD *shown = pb_extra_buffer(0);
     DWORD pitch_px = pb_back_buffer_pitch() / 4;
+
+    /* 5: flips at 4/s with 7 draws into the shown buffer between them, 33 ms apart */
+    for (unsigned int n = 0, k = 0; ONLY_PHASE == 5; n++) {
+        int back = 1 + (n & 1);
+        pgraph_frame(back, (k * 8) % (W - 40), 0xffff8000, "updpaths 5: flips 4/s, draws between them 30/s", k++);
+        wait_vbl(1);
+        CRTC_START = phys(pb_extra_buffer(back));
+        for (int d = 0; d < 7; d++) {
+            wait_vbl(2);
+            pgraph_frame(back, (k * 8) % (W - 40), 0xffff8000, "updpaths 5: flips 4/s, draws between them 30/s", k++);
+        }
+    }
 
     /* 1: PVIDEO overlay buffer switches */
     pgraph_frame(0, -1, 0, "updpaths 1: PVIDEO overlay switches, 30/s", 0);
