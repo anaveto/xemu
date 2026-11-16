@@ -114,6 +114,7 @@ void pgraph_write(void *opaque, hwaddr addr, uint64_t val, unsigned int size)
                         % PG_GET_MASK(NV_PGRAPH_SURFACE,
                                    NV_PGRAPH_SURFACE_MODULO_3D) );
             nv2a_profile_increment();
+            qatomic_inc(&nv2a_fs_inc);
             pfifo_kick(d);
         }
         break;
