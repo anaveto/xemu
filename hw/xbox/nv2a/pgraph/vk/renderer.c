@@ -189,6 +189,7 @@ static int pgraph_vk_get_framebuffer_surface(NV2AState *d)
     assert(surface->color);
 
     surface->frame_time = pg->frame_time;
+    pg->scanout_writes = surface->writes;
 
 #if HAVE_EXTERNAL_MEMORY
     qemu_event_reset(&d->pgraph.sync_complete);

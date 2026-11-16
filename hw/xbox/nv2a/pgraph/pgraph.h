@@ -151,6 +151,7 @@ typedef struct PGRAPHState {
     QemuCond flip_cond;
     unsigned int flip_count;
     bool start_changed;
+    unsigned int scanout_writes;
 
     /* subchannels state we're not sure the location of... */
     ContextSurfaces2DState context_surfaces_2d;

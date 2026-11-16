@@ -106,6 +106,7 @@ void pgraph_gl_set_surface_dirty(PGRAPHState *pg, bool color, bool zeta)
 
     if (r->color_binding) {
         r->color_binding->draw_dirty |= color;
+        r->color_binding->writes += color;
         r->color_binding->frame_time = pg->frame_time;
         r->color_binding->cleared = false;
 
@@ -1104,6 +1105,7 @@ static void populate_surface_binding_entry_sized(NV2AState *d, bool color,
     entry->upload_pending = true;
     entry->download_pending = false;
     entry->draw_dirty = false;
+    entry->writes = 0;
     entry->dma_addr = dma.address;
     entry->dma_len = dma.limit;
     entry->frame_time = pg->frame_time;
