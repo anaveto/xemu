@@ -43,7 +43,7 @@ void xemu_main_loop_unlock(void);
 void xemu_hud_init(SDL_Window *window, void *sdl_gl_context);
 void xemu_hud_cleanup(void);
 void xemu_hud_update(void);
-void xemu_hud_render(void);
+bool xemu_hud_render(void);
 void xemu_hud_process_sdl_events(SDL_Event *event);
 void xemu_hud_should_capture_kbd_mouse(int *kbd, int *mouse);
 void xemu_hud_set_framebuffer_texture(GLuint tex, bool flip);

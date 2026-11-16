@@ -879,7 +879,7 @@ static void gl_render_frame(struct xemu_console *scon)
     xemu_hud_update();
     xemu_main_loop_unlock();
 
-    xemu_hud_render();
+    bool ui_visible = xemu_hud_render();
     glFinish();
 
     if (release_surface_texture) {
@@ -890,8 +890,8 @@ static void gl_render_frame(struct xemu_console *scon)
 
     /*
      * Present only when the guest flipped, so that the host frame rate is the
-     * guest frame rate, also while the HUD is open. The VGA path and guests
-     * that stop flipping for over 500 ms are presented every time.
+     * guest frame rate. Every frame is presented while the UI shows, on the
+     * VGA path, and when the guest has not flipped for over 500 ms.
      */
     bool present = true;
     if (g_config.display.window.present_only_new_frames &&
@@ -900,7 +900,8 @@ static void gl_render_frame(struct xemu_console *scon)
         if (flips != presented_flips) {
             last_flip_ms = now;
         }
-        present = flips != presented_flips || now - last_flip_ms > 500;
+        present = ui_visible || flips != presented_flips ||
+                  now - last_flip_ms > 500;
     }
 
     if (!present) {
