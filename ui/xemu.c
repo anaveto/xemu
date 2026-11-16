@@ -980,6 +980,24 @@ static void gl_render_frame(struct xemu_console *scon)
                                                writes != presented_writes);
     }
 
+    {
+        /* test only: PCSX2's cap, XEMU_FS_CAP=N skips at most N passes in a row */
+        static int fs_cap = -1;
+        static int fs_skipped;
+        if (fs_cap < 0) {
+            fs_cap = getenv("XEMU_FS_CAP") ? atoi(getenv("XEMU_FS_CAP")) : 0;
+        }
+        if (fs_cap && !present) {
+            if (fs_skipped < fs_cap) {
+                fs_skipped++;
+            } else {
+                present = true;
+            }
+        }
+        if (present) {
+            fs_skipped = 0;
+        }
+    }
     flipstats_pass(release_surface_texture, present, flips, fs_writes);
 
     if (!present) {
