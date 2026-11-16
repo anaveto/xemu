@@ -24,7 +24,7 @@ jobs:
       - name: Build guests
         run: |
           eval $(nxdk/bin/activate -s)
-          for g in flip250 vramcrtc; do make -C $g -j$(nproc); done
+          for g in flip250 vramcrtc updpaths; do make -C $g -j$(nproc); done
           ls -l */bin */*.iso
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
