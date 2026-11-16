@@ -148,7 +148,8 @@ int main(void)
         p = pb_push1_to(SUBCH_4, p, NV062_SET_COLOR_FORMAT, 0x07); /* LE_X8R8G8B8 */
         p = pb_push1_to(SUBCH_4, p, NV062_SET_PITCH, (W * 4) | ((pitch_px * 4) << 16));
         p = pb_push1_to(SUBCH_4, p, NV062_SET_OFFSET_SOURCE, phys(band));
-        p = pb_push1_to(SUBCH_4, p, NV062_SET_OFFSET_DESTIN, phys(shown));
+        /* pbkit points DMA object 11 (the blit destination) at the render target, extra buffer 0 */
+        p = pb_push1_to(SUBCH_4, p, NV062_SET_OFFSET_DESTIN, 0);
         p = pb_push1_to(SUBCH_3, p, NV09F_CONTROL_POINT_IN, 0);
         p = pb_push1_to(SUBCH_3, p, NV09F_CONTROL_POINT_OUT, BAND_Y << 16);
         p = pb_push1_to(SUBCH_3, p, NV09F_SIZE, W | (BAND_H << 16));
