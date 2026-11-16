@@ -28,6 +28,9 @@
 /* Ported SDL 1.2 code to 2.0 by Dave Airlie. */
 
 #include "qemu/osdep.h"
+#ifdef __linux__
+#include <sys/resource.h>
+#endif
 #include "qemu/module.h"
 #include "qemu/thread.h"
 #include "qemu/main-loop.h"
@@ -861,6 +864,118 @@ static bool present_needed(bool vga, unsigned int flips, unsigned int writes,
     return present;
 }
 
+static void flipstats_pass(bool vga, bool present, unsigned int flips,
+                           unsigned int writes)
+{
+    static int enabled = -1;
+    static int64_t t0, last_present, last_press;
+    static unsigned int passes, vga_passes, presents, ui_passes, presses;
+    static int64_t max_gap, lat_sum, lat_max, close_t, close_lat;
+    static bool ui_was;
+    static unsigned int inc0, startw0, startc0, pvb0, flips0, writes0;
+    static int64_t cpu0;
+
+    if (enabled < 0) {
+        enabled = getenv("XEMU_FLIPSTATS") != NULL;
+    }
+    if (!enabled) {
+        return;
+    }
+    int64_t now = SDL_GetTicks();
+    if (!t0) {
+        t0 = last_present = now;
+    }
+    passes++;
+    vga_passes += vga;
+    bool ui_now = xemu_hud_fs_vertices() > 0;
+    ui_passes += ui_now;
+    if (ui_was && !ui_now) {
+        close_t = now;
+    }
+    ui_was = ui_now;
+    if (present) {
+        presents++;
+        if (close_t) {
+            close_lat = MAX(close_lat, now - close_t);
+            close_t = 0;
+        }
+        max_gap = MAX(max_gap, now - last_present);
+        last_present = now;
+        int64_t press = qatomic_read(&xemu_hud_fs_press_ms);
+        if (press > last_press) {
+            presses++;
+            lat_sum += now - press;
+            lat_max = MAX(lat_max, now - press);
+            last_press = press;
+        }
+    }
+    if (now - t0 >= 1000) {
+        unsigned int inc = qatomic_read(&nv2a_fs_inc);
+        unsigned int startw = qatomic_read(&nv2a_fs_startw);
+        unsigned int startc = qatomic_read(&nv2a_fs_startc);
+        unsigned int pvb = qatomic_read(&nv2a_fs_pvb);
+        int64_t cpu = 0;
+#ifdef RUSAGE_THREAD
+        struct rusage ru;
+        if (!getrusage(RUSAGE_THREAD, &ru)) {
+            cpu = (ru.ru_utime.tv_sec + ru.ru_stime.tv_sec) * 1000000LL +
+                  ru.ru_utime.tv_usec + ru.ru_stime.tv_usec;
+        }
+#endif
+        fprintf(stderr,
+                "flipstats %" PRId64 " ms=%" PRId64 " inc=%u startw=%u "
+                "startc=%u pvb=%u flips=%u sw=%u passes=%u vga=%u ui=%u presents=%u "
+                "maxgap=%" PRId64 " presses=%u lat_avg=%" PRId64
+                " lat_max=%" PRId64 " closelat=%" PRId64 " uicpu_us=%" PRId64 "\n",
+                now, now - t0, inc - inc0, startw - startw0, startc - startc0,
+                pvb - pvb0, flips - flips0, writes - writes0, passes, vga_passes,
+                ui_passes,
+                presents, max_gap, presses, presses ? lat_sum / presses : 0,
+                lat_max, close_lat, cpu - cpu0);
+        inc0 = inc; startw0 = startw; startc0 = startc; pvb0 = pvb;
+        flips0 = flips; writes0 = writes; cpu0 = cpu;
+        t0 = now;
+        passes = vga_passes = presents = ui_passes = presses = 0;
+        max_gap = lat_sum = lat_max = close_lat = 0;
+    }
+}
+
+/* test only (XEMU_FS_V2=1): v2's decision, copied from present-only-v2 */
+static bool fs_present_v2(bool release_surface_texture, unsigned int flips,
+                          unsigned int writes, bool ui_visible)
+{
+    static unsigned int presented_flips, presented_writes;
+    bool present = true;
+    if (g_config.display.window.present_only_new_frames &&
+        !release_surface_texture) {
+        static enum {
+            NEW_FRAME_ALWAYS,
+            NEW_FRAME_FLIPS,
+            NEW_FRAME_WRITES
+        } signal;
+        static unsigned int window_flips, window_writes;
+        static int64_t window_end_ms;
+        int64_t now = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
+        if (now >= window_end_ms) {
+            signal = flips != window_flips   ? NEW_FRAME_FLIPS :
+                     writes != window_writes ? NEW_FRAME_WRITES :
+                                               NEW_FRAME_ALWAYS;
+            window_flips = flips;
+            window_writes = writes;
+            window_end_ms = now + 500;
+        }
+        present = ui_visible || signal == NEW_FRAME_ALWAYS ||
+                  (signal == NEW_FRAME_FLIPS ? flips != presented_flips :
+                                               writes != presented_writes);
+    }
+
+    if (present) {
+        presented_flips = flips;
+        presented_writes = writes;
+    }
+    return present;
+}
+
 /**
  * Renders the main interface. Usually called from the main thread,
  * but may sometimes be called from another thread.
@@ -919,9 +1034,15 @@ static void gl_render_frame(struct xemu_console *scon, bool redraw)
     xemu_main_loop_unlock();
 
     bool ui_visible = xemu_hud_end_frame();
+    if (getenv("XEMU_FS_NO_UI_RATE")) {
+        ui_visible = false; /* test only: the Claw's fork main */
+    }
     bool present =
         redraw || !g_config.display.window.present_only_new_frames ||
-        present_needed(release_surface_texture, flips, writes, ui_visible);
+        (getenv("XEMU_FS_V2") ?
+             fs_present_v2(release_surface_texture, flips, writes, ui_visible) :
+             present_needed(release_surface_texture, flips, writes, ui_visible));
+    flipstats_pass(release_surface_texture, present, flips, writes);
 
     if (present) {
 #ifdef _WIN32
