@@ -386,6 +386,8 @@ void pgraph_gl_sync(NV2AState *d)
 
     /* FIXME: Sanity check surface dimensions */
 
+    d->pgraph.scanout_writes = qatomic_read(&surface->writes);
+
     /* Wait for queued commands to complete */
     pgraph_gl_upload_surface_data(d, surface, !tcg_enabled());
     gl_fence();

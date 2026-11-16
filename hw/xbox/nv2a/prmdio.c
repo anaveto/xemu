@@ -49,6 +49,7 @@ void prmdio_write(void *opaque, hwaddr addr, uint64_t val, unsigned int size)
     case NV_USER_DAC_PALETTE_DATA:
         /* FIXME: Confirm wrap-around */
         d->puserdac.palette[d->puserdac.write_mode_address++ % (256*3)] = val;
+        pgraph_count_flip(d);
         break;
     default:
         break;

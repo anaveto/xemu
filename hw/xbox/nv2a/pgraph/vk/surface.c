@@ -142,6 +142,7 @@ unsigned int pgraph_vk_mark_surfaces_in_range_for_upload(NV2AState *d,
     QTAILQ_FOREACH (surface, &r->surfaces, entry) {
         if (check_surface_overlaps_range(surface, start, size)) {
             surface->upload_pending = true;
+            qatomic_inc(&surface->writes);
             ++num_marked;
         }
     }
@@ -586,6 +587,7 @@ static void surface_access_callback(void *opaque, MemoryRegion *mr, hwaddr addr,
 
         if (write) {
             surface->upload_pending = true;
+            qatomic_inc(&surface->writes);
         }
     }
 
@@ -1383,6 +1385,7 @@ static void populate_surface_binding_target_sized(NV2AState *d, bool color,
     target->upload_pending = true;
     target->download_pending = false;
     target->draw_dirty = false;
+    target->writes = 0;
     target->dma_addr = dma.address;
     target->dma_len = dma.limit;
     target->frame_time = pg->frame_time;

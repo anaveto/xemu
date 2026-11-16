@@ -198,6 +198,7 @@ static int pgraph_vk_get_framebuffer_surface(NV2AState *d)
     qemu_event_wait(&d->pgraph.sync_complete);
     return r->display.gl_texture_id;
 #else
+    pg->scanout_writes = qatomic_read(&surface->writes);
     qemu_mutex_unlock(&d->pfifo.lock);
     pgraph_vk_wait_for_surface_download(surface);
     return 0;
