@@ -818,13 +818,14 @@ static void report_stats(void)
  * Renders the main interface. Usually called from the main thread,
  * but may sometimes be called from another thread.
  */
-static void flipstats_pass(bool vga, bool present, unsigned int flips)
+static void flipstats_pass(bool vga, bool present, unsigned int flips,
+                           unsigned int writes)
 {
     static int enabled = -1;
     static int64_t t0, last_present, last_press;
     static unsigned int passes, vga_passes, presents, ui_passes, presses;
     static int64_t max_gap, lat_sum, lat_max;
-    static unsigned int inc0, startw0, startc0, pvb0, flips0;
+    static unsigned int inc0, startw0, startc0, pvb0, flips0, writes0;
 
     if (enabled < 0) {
         enabled = getenv("XEMU_FLIPSTATS") != NULL;
@@ -858,15 +859,16 @@ static void flipstats_pass(bool vga, bool present, unsigned int flips)
         unsigned int pvb = qatomic_read(&nv2a_fs_pvb);
         fprintf(stderr,
                 "flipstats %" PRId64 " ms=%" PRId64 " inc=%u startw=%u "
-                "startc=%u pvb=%u flips=%u passes=%u vga=%u ui=%u presents=%u "
+                "startc=%u pvb=%u flips=%u sw=%u passes=%u vga=%u ui=%u presents=%u "
                 "maxgap=%" PRId64 " presses=%u lat_avg=%" PRId64
                 " lat_max=%" PRId64 "\n",
                 now, now - t0, inc - inc0, startw - startw0, startc - startc0,
-                pvb - pvb0, flips - flips0, passes, vga_passes, ui_passes,
+                pvb - pvb0, flips - flips0, writes - writes0, passes, vga_passes,
+                ui_passes,
                 presents, max_gap, presses, presses ? lat_sum / presses : 0,
                 lat_max);
         inc0 = inc; startw0 = startw; startc0 = startc; pvb0 = pvb;
-        flips0 = flips;
+        flips0 = flips; writes0 = writes;
         t0 = now;
         passes = vga_passes = presents = ui_passes = presses = 0;
         max_gap = lat_sum = lat_max = 0;
@@ -901,6 +903,10 @@ static void gl_render_frame(struct xemu_console *scon)
      */
     GLuint tex = nv2a_get_framebuffer_surface();
     unsigned int writes = nv2a_get_scanout_writes();
+    unsigned int fs_writes = writes;
+    if (getenv("XEMU_FS_NO_SW")) {
+        writes = presented_writes; /* test only: PR as opened */
+    }
 
     ASSERT_NO_GL_ERROR();
 
@@ -974,7 +980,7 @@ static void gl_render_frame(struct xemu_console *scon)
                                                writes != presented_writes);
     }
 
-    flipstats_pass(release_surface_texture, present, flips);
+    flipstats_pass(release_surface_texture, present, flips, fs_writes);
 
     if (!present) {
 #ifdef _WIN32
