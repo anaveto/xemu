@@ -917,7 +917,7 @@ static void gl_render_frame(struct xemu_console *scon, bool redraw)
     xemu_hud_update();
     xemu_main_loop_unlock();
 
-    bool ui_visible = xemu_hud_render();
+    xemu_hud_render();
     glFinish();
 
     if (release_surface_texture) {
@@ -928,7 +928,7 @@ static void gl_render_frame(struct xemu_console *scon, bool redraw)
 
     bool present =
         redraw || !g_config.display.window.present_only_new_frames ||
-        present_needed(release_surface_texture, flips, writes, ui_visible);
+        present_needed(release_surface_texture, flips, writes, false);
 
     if (!present) {
 #ifdef _WIN32
