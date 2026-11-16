@@ -1844,6 +1844,9 @@ void pgraph_vk_set_surface_dirty(PGRAPHState *pg, bool color, bool zeta)
 
     if (r->color_binding) {
         r->color_binding->draw_dirty |= color;
+        if (color) {
+            qatomic_inc(&r->color_binding->writes);
+        }
         r->color_binding->frame_time = pg->frame_time;
         r->color_binding->cleared = false;
     }
