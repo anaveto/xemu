@@ -824,9 +824,14 @@ static void report_stats(void)
  * flips in the last four flip intervals, a draw counts only two flip
  * intervals (at most 150 ms) after a flip. VGA counts display updates.
  */
+static unsigned int fs_held; /* test only: passes with a surface draw the hold kept back */
 static bool present_needed(bool vga, unsigned int flips, unsigned int writes,
                            bool ui_visible)
 {
+    static int fs_nohold = -1; /* test only (XEMU_FS_NOHOLD=1): v4 without the hold */
+    if (fs_nohold < 0) {
+        fs_nohold = getenv("XEMU_FS_NOHOLD") != NULL;
+    }
     static unsigned int last_flips, last_writes, presented_flips,
         presented_writes;
     static int64_t flip_ms, flip_interval_ms, presented_ms;
@@ -849,8 +854,10 @@ static bool present_needed(bool vga, unsigned int flips, unsigned int writes,
         (vga ? writes != presented_writes :
                flips != presented_flips ||
                    (writes != presented_writes &&
-                    (flips_without_draw == 4 ||
+                    (fs_nohold || flips_without_draw == 4 ||
                      now - flip_ms > MIN(2 * flip_interval_ms, 150))));
+    fs_held += !vga && flips == presented_flips && writes != presented_writes &&
+               !new_frame;
     bool present =
         new_frame || ui_visible || ui_was_visible || now - presented_ms >= 500;
     ui_was_visible = ui_visible;
@@ -871,7 +878,7 @@ static void flipstats_pass(bool vga, bool present, unsigned int flips,
     static unsigned int passes, vga_passes, presents, ui_passes, presses;
     static int64_t max_gap, lat_sum, lat_max, close_t, close_lat;
     static bool ui_was;
-    static unsigned int inc0, startw0, startc0, pvb0, flips0, writes0;
+    static unsigned int inc0, startw0, startc0, pvb0, flips0, writes0, held0;
     static int64_t cpu0;
 
     if (enabled < 0) {
@@ -924,15 +931,15 @@ static void flipstats_pass(bool vga, bool present, unsigned int flips,
         fprintf(stderr,
                 "flipstats %" PRId64 " ms=%" PRId64 " inc=%u startw=%u "
                 "startc=%u pvb=%u flips=%u sw=%u passes=%u vga=%u ui=%u presents=%u "
-                "maxgap=%" PRId64 " presses=%u lat_avg=%" PRId64
+                "maxgap=%" PRId64 " held=%u presses=%u lat_avg=%" PRId64
                 " lat_max=%" PRId64 " closelat=%" PRId64 " uicpu_us=%" PRId64 "\n",
                 now, now - t0, inc - inc0, startw - startw0, startc - startc0,
                 pvb - pvb0, flips - flips0, writes - writes0, passes, vga_passes,
                 ui_passes,
-                presents, max_gap, presses, presses ? lat_sum / presses : 0,
+                presents, max_gap, fs_held - held0, presses, presses ? lat_sum / presses : 0,
                 lat_max, close_lat, cpu - cpu0);
         inc0 = inc; startw0 = startw; startc0 = startc; pvb0 = pvb;
-        flips0 = flips; writes0 = writes; cpu0 = cpu;
+        flips0 = flips; writes0 = writes; cpu0 = cpu; held0 = fs_held;
         t0 = now;
         passes = vga_passes = presents = ui_passes = presses = 0;
         max_gap = lat_sum = lat_max = close_lat = 0;
