@@ -818,6 +818,59 @@ static void report_stats(void)
  * Renders the main interface. Usually called from the main thread,
  * but may sometimes be called from another thread.
  */
+static void flipstats_pass(bool vga, bool present)
+{
+    static int enabled = -1;
+    static int64_t t0, last_present, last_press;
+    static unsigned int passes, vga_passes, presents, ui_passes, presses;
+    static int64_t max_gap, lat_sum, lat_max;
+    static unsigned int inc0, startw0, startc0, rule0;
+
+    if (enabled < 0) {
+        enabled = getenv("XEMU_FLIPSTATS") != NULL;
+    }
+    if (!enabled) {
+        return;
+    }
+    int64_t now = SDL_GetTicks();
+    if (!t0) {
+        t0 = last_present = now;
+    }
+    passes++;
+    vga_passes += vga;
+    ui_passes += xemu_hud_fs_vertices() > 0;
+    if (present) {
+        presents++;
+        max_gap = MAX(max_gap, now - last_present);
+        last_present = now;
+        int64_t press = qatomic_read(&xemu_hud_fs_press_ms);
+        if (press > last_press) {
+            presses++;
+            lat_sum += now - press;
+            lat_max = MAX(lat_max, now - press);
+            last_press = press;
+        }
+    }
+    if (now - t0 >= 1000) {
+        unsigned int inc = qatomic_read(&nv2a_fs_inc);
+        unsigned int startw = qatomic_read(&nv2a_fs_startw);
+        unsigned int startc = qatomic_read(&nv2a_fs_startc);
+        unsigned int rule = qatomic_read(&nv2a_fs_rule);
+        fprintf(stderr,
+                "flipstats %" PRId64 " ms=%" PRId64 " inc=%u startw=%u "
+                "startc=%u rule=%u passes=%u vga=%u ui=%u presents=%u "
+                "maxgap=%" PRId64 " presses=%u lat_avg=%" PRId64
+                " lat_max=%" PRId64 "\n",
+                now, now - t0, inc - inc0, startw - startw0, startc - startc0,
+                rule - rule0, passes, vga_passes, ui_passes, presents, max_gap,
+                presses, presses ? lat_sum / presses : 0, lat_max);
+        inc0 = inc; startw0 = startw; startc0 = startc; rule0 = rule;
+        t0 = now;
+        passes = vga_passes = presents = ui_passes = presses = 0;
+        max_gap = lat_sum = lat_max = 0;
+    }
+}
+
 static void gl_render_frame(struct xemu_console *scon)
 {
     static bool rendering;
@@ -880,6 +933,9 @@ static void gl_render_frame(struct xemu_console *scon)
     xemu_main_loop_unlock();
 
     bool ui_visible = xemu_hud_render();
+    if (getenv("XEMU_FS_NO_UI_RATE")) {
+        ui_visible = false; /* test only: the behavior without the prototype */
+    }
     glFinish();
 
     if (release_surface_texture) {
@@ -903,6 +959,8 @@ static void gl_render_frame(struct xemu_console *scon)
         present = ui_visible || flips != presented_flips ||
                   now - last_flip_ms > 500;
     }
+
+    flipstats_pass(release_surface_texture, present);
 
     if (!present) {
 #ifdef _WIN32
