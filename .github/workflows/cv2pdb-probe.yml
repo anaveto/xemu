@@ -1,0 +1,45 @@
+name: cv2pdb probe
+# Test only (bugfixes session, 2026-11-16): why cv2pdb 0.52 exits 1 without a message on the arm64 release build of
+# 696837b (run 43782302746) and not on 3b0786a's (run 43777020945). Runs cv2pdb on the stored builds, twice each,
+# with -debug, and keeps the logs.
+on:
+  push:
+    branches: [ci/cv2pdb-probe]
+permissions:
+  actions: read
+  contents: read
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { tag: fail-arm64-release, run: '43782302746', art: xemu-windows-arm64-release }
+          - { tag: pass-arm64-release, run: '43777020945', art: xemu-windows-arm64-release }
+          - { tag: new-arm64-debug, run: '43782302746', art: xemu-windows-arm64-debug }
+          - { tag: new-x86_64-release, run: '43782302746', art: xemu-windows-x86_64-release }
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
+        with: { name: '${{ matrix.art }}', path: dist, run-id: '${{ matrix.run }}', github-token: '${{ github.token }}' }
+      - name: cv2pdb twice, then with -debug
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/rainers/cv2pdb/releases/download/v0.52/cv2pdb-0.52.zip" -OutFile "cv2pdb.zip"
+          7z x -ocv2pdb -y cv2pdb.zip | Out-Null
+          mkdir logs | Out-Null
+          (Get-FileHash dist/xemu.exe).Hash
+          foreach ($i in 1, 2) {
+            Copy-Item dist/xemu.exe "x$i.exe"
+            & ./cv2pdb/cv2pdb64.exe "x$i.exe" *> "logs/plain-$i.txt"
+            "plain run ${i}: exit $LASTEXITCODE, output:"; Get-Content "logs/plain-$i.txt"
+          }
+          Copy-Item dist/xemu.exe xd.exe
+          & ./cv2pdb/cv2pdb64.exe -debug xd.exe *> logs/debug.txt
+          "debug run: exit $LASTEXITCODE, $((Get-Item logs/debug.txt).Length) bytes of output; last 60 lines:"
+          Get-Content logs/debug.txt -Tail 60
+          Get-ChildItem *.pdb | Format-Table Name, Length
+          exit 0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with: { name: 'cv2pdb-logs-${{ matrix.tag }}', path: logs }
