@@ -1,5 +1,5 @@
 name: cv2pdb probe
-# Test only (bugfixes session, 2026-11-16), probe 3: do cv2pdb 0.54's PDBs load? Converts the Windows builds of
+# Test only (bugfixes session, 2026-11-16), probe 4 (x86_64 release, 0.52 against 0.54): do cv2pdb 0.54's PDBs load? Converts the Windows builds of
 # 696837b (run 43782302746) with 0.54, then lets cdb load the converted xemu.exe as an image with the PDB and
 # resolve known functions.
 on:
@@ -15,21 +15,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        art: [xemu-windows-arm64-release, xemu-windows-x86_64-release, xemu-windows-arm64-debug, xemu-windows-x86_64-debug]
+        art: [xemu-windows-x86_64-release]
+        v: ['0.52', '0.54']
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with: { name: '${{ matrix.art }}', path: dist, run-id: '43782302746', github-token: '${{ github.token }}' }
       - name: cv2pdb 0.54, then symbols through cdb
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri "https://github.com/rainers/cv2pdb/releases/download/v0.54/cv2pdb-0.54.zip" -OutFile "cv2pdb.zip"
+          Invoke-WebRequest -Uri "https://github.com/rainers/cv2pdb/releases/download/v${{ matrix.v }}/cv2pdb-${{ matrix.v }}.zip" -OutFile "cv2pdb.zip"
           7z x -ocv2pdb -y cv2pdb.zip | Out-Null
           cd dist
           & ../cv2pdb/cv2pdb64.exe xemu.exe *> ../cv2pdb-out.txt
-          "cv2pdb 0.54: exit $LASTEXITCODE, $((Get-Content ../cv2pdb-out.txt | Measure-Object -Line).Lines) lines of output"
+          "cv2pdb ${{ matrix.v }}: exit $LASTEXITCODE, $((Get-Content ../cv2pdb-out.txt | Measure-Object -Line).Lines) lines of output"
           Get-ChildItem xemu.exe, xemu.pdb | Format-Table Name, Length
           $cdb = "C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe"
-          & $cdb -z "$PWD\xemu.exe" -y "$PWD" -c ".symopt+ 0x40; .reload /f xemu.exe; lm v m xemu; x xemu!main; x xemu!gl_render_frame; x xemu!xemu_hud_render; x xemu!pgraph_*flip*; q" 2>&1 | Select-String -Pattern "xemu|PDB|pdb|Symbol|error|ERROR" | Select-Object -First 40
+          & $cdb -z "$PWD\xemu.exe" -y "$PWD" -c ".symopt+ 0x40; .reload /f xemu.exe; lm v m xemu; x xemu!main; x xemu!gl_render_frame; x xemu!xemu_hud_render; x xemu!pgraph_*flip*; q" 2>&1 | Select-String -Pattern "!|pdb symbols|no symbols|export symbols|ERROR" | Select-Object -Last 30
           exit 0
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        with: { name: 'pdb054-${{ matrix.art }}', path: 'dist/xemu.pdb', retention-days: 7 }
+        with: { name: 'pdb-${{ matrix.v }}-${{ matrix.art }}', path: 'dist/xemu.pdb', retention-days: 7 }
