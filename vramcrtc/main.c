@@ -43,12 +43,20 @@ static void pgraph_frame(int buffer, int x, DWORD bar, const char *label, unsign
 int main(void)
 {
     XVideoSetMode(W, H, 32, REFRESH_DEFAULT);
+    /* pbkit first: XVideoWaitForVBlank() keeps IRQ 3, and pb_init() then fails with -4 */
+    pb_extra_buffers(2);
+    if (pb_init()) {
+        debugPrint("pb_init failed\n");
+        Sleep(5000);
+        return 1;
+    }
 
     /* 1: CPU, one buffer */
     DWORD *fb0 = (DWORD *)XVideoGetFB();
+    CRTC_START = (DWORD)fb0 & 0x03FFFFFF;
     for (unsigned int v = 0, n = 0; v < PHASE_VBL; v += 2, n++) {
-        XVideoWaitForVBlank();
-        XVideoWaitForVBlank();
+        pb_wait_for_vbl();
+        pb_wait_for_vbl();
         cpu_frame(fb0, (n * 8) % (W - 40), 0xffff0000);
     }
 
@@ -59,19 +67,12 @@ int main(void)
     for (unsigned int v = 0, n = 0; v < PHASE_VBL; v += 3, n++) {
         DWORD *back = cpu_buf[(n + 1) & 1];
         cpu_frame(back, (n * 12) % (W - 40), 0xff00ff00);
-        XVideoWaitForVBlank();
-        XVideoWaitForVBlank();
-        XVideoWaitForVBlank();
+        pb_wait_for_vbl();
+        pb_wait_for_vbl();
+        pb_wait_for_vbl();
         CRTC_START = (DWORD)back & 0x03FFFFFF;
     }
     CRTC_START = (DWORD)fb0 & 0x03FFFFFF;
-
-    pb_extra_buffers(2);
-    if (pb_init()) {
-        debugPrint("pb_init failed\n");
-        Sleep(5000);
-        return 1;
-    }
 
     /* 3: PGRAPH into the displayed buffer, no flip */
     CRTC_START = (DWORD)pb_extra_buffer(0) & 0x03FFFFFF;
