@@ -1,0 +1,34 @@
+name: Test guests
+
+on:
+  push:
+    branches:
+      - test-guests
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get -y update
+          sudo apt-get -y install llvm lld clang pkgconf cmake flex bison
+      - name: Build nxdk
+        run: |
+          git clone https://github.com/XboxDev/nxdk nxdk
+          git -C nxdk checkout fafbe41
+          git -C nxdk submodule update --init --recursive
+          cd nxdk && eval $(./bin/activate -s) && make NXDK_ONLY=y -j$(nproc)
+      - name: Build guests
+        run: |
+          eval $(nxdk/bin/activate -s)
+          for g in flip250 vramcrtc; do make -C $g -j$(nproc); done
+          ls -l */bin */*.iso
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: test-guests
+          path: |
+            */*.iso
+            */bin/default.xbe
