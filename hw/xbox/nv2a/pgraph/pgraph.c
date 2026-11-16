@@ -114,12 +114,7 @@ void pgraph_write(void *opaque, hwaddr addr, uint64_t val, unsigned int size)
                         % PG_GET_MASK(NV_PGRAPH_SURFACE,
                                    NV_PGRAPH_SURFACE_MODULO_3D) );
             nv2a_profile_increment();
-
-            qemu_mutex_lock(&pg->flip_lock);
-            pg->flip_count++;
-            qemu_cond_broadcast(&pg->flip_cond);
-            qemu_mutex_unlock(&pg->flip_lock);
-
+            pgraph_count_flip(d, false);
             pfifo_kick(d);
         }
         break;
@@ -407,6 +402,19 @@ void nv2a_release_framebuffer_surface(void)
     pg->framebuffer_in_use = false;
     qemu_cond_broadcast(&pg->framebuffer_released);
     qemu_mutex_unlock(&pg->renderer_lock);
+}
+
+void pgraph_count_flip(NV2AState *d, bool start_changed)
+{
+    PGRAPHState *pg = &d->pgraph;
+
+    qemu_mutex_lock(&pg->flip_lock);
+    if (start_changed || !pg->start_changed) {
+        pg->flip_count++;
+        qemu_cond_broadcast(&pg->flip_cond);
+    }
+    pg->start_changed = start_changed;
+    qemu_mutex_unlock(&pg->flip_lock);
 }
 
 unsigned int nv2a_wait_for_flip(unsigned int count, int timeout_ms)

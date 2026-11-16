@@ -150,6 +150,7 @@ typedef struct PGRAPHState {
     QemuMutex flip_lock;
     QemuCond flip_cond;
     unsigned int flip_count;
+    bool start_changed;
 
     /* subchannels state we're not sure the location of... */
     ContextSurfaces2DState context_surfaces_2d;
@@ -282,6 +283,7 @@ typedef struct PGRAPHState {
 void pgraph_init(NV2AState *d);
 void pgraph_init_thread(NV2AState *d);
 void pgraph_destroy(PGRAPHState *pg);
+void pgraph_count_flip(NV2AState *d, bool start_changed);
 void pgraph_context_switch(NV2AState *d, unsigned int channel_id);
 void pgraph_process_pending(NV2AState *d);
 void pgraph_process_pending_reports(NV2AState *d);
