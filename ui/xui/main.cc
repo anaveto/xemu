@@ -322,10 +322,11 @@ void xemu_hud_update(void)
     // if (show_demo) ImGui::ShowDemoWindow(&show_demo);
 }
 
-void xemu_hud_render()
+bool xemu_hud_render()
 {
     ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    ImDrawData *draw_data = ImGui::GetDrawData();
+    ImGui_ImplOpenGL3_RenderDrawData(draw_data);
 
     if (g_vsync != g_config.display.window.vsync) {
         g_vsync = g_config.display.window.vsync;
@@ -336,4 +337,6 @@ void xemu_hud_render()
         SaveScreenshot(g_tex, g_flip_req);
         g_screenshot_pending = false;
     }
+
+    return draw_data->TotalVtxCount > 0;
 }
