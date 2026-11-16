@@ -45,6 +45,8 @@ void xemu_hud_cleanup(void);
 void xemu_hud_update(void);
 bool xemu_hud_end_frame(void);
 void xemu_hud_render(void);
+int xemu_hud_fs_vertices(void);
+extern int64_t xemu_hud_fs_press_ms;
 void xemu_hud_process_sdl_events(SDL_Event *event);
 void xemu_hud_should_capture_kbd_mouse(int *kbd, int *mouse);
 void xemu_hud_set_framebuffer_texture(GLuint tex, bool flip);
