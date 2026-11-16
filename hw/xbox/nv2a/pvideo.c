@@ -60,6 +60,7 @@ void pvideo_write(void *opaque, hwaddr addr, uint64_t val, unsigned int size)
         d->pvideo.regs[addr] = val;
         // d->vga.enable_overlay = true;
         pvideo_vga_invalidate(d);
+        pgraph_count_overlay_flip(d);
         break;
     case NV_PVIDEO_STOP:
         // PVIDEO_STOP may be set many times during the course of video playback
