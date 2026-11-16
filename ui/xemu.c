@@ -123,6 +123,7 @@ static QEMUTimer *vblank_timer;
 static QemuThread vblank_thread;
 static bool qemu_exiting;
 static int exit_status;
+static unsigned int vga_updates;
 
 void tcg_register_init_ctx(void); // tcg.c
 
@@ -814,6 +815,42 @@ static void report_stats(void)
 }
 #endif
 
+/*
+ * Present new guest frames, any UI and the frame after it, and every pass
+ * after 500 ms without a new frame. A draw into the shown surface counts only
+ * two flip intervals (at most 150 ms) after a flip: guests that flip also draw
+ * there. The VGA path counts display updates, as QEMU's SDL GL display does.
+ */
+static bool present_needed(bool vga, unsigned int flips, unsigned int writes,
+                           bool ui_visible)
+{
+    static unsigned int last_flips, presented_flips, presented_writes;
+    static int64_t flip_ms, flip_interval_ms, new_frame_ms;
+    static bool ui_was_visible;
+    int64_t now = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
+
+    if (flips != last_flips) {
+        flip_interval_ms = now - flip_ms;
+        flip_ms = now;
+        last_flips = flips;
+    }
+    bool new_frame = vga ? writes != presented_writes :
+                           flips != presented_flips ||
+                               (writes != presented_writes &&
+                                now - flip_ms > MIN(2 * flip_interval_ms, 150));
+    if (new_frame) {
+        new_frame_ms = now;
+    }
+    bool present =
+        new_frame || ui_visible || ui_was_visible || now - new_frame_ms > 500;
+    ui_was_visible = ui_visible;
+    if (present) {
+        presented_flips = flips;
+        presented_writes = writes;
+    }
+    return present;
+}
+
 /**
  * Renders the main interface. Usually called from the main thread,
  * but may sometimes be called from another thread.
@@ -830,6 +867,8 @@ static void gl_render_frame(struct xemu_console *scon)
     bool flip_required = false;
     bool release_surface_texture = false;
 
+    unsigned int flips = nv2a_wait_for_flip(0, 0);
+
     /* XXX: Note that this bypasses the usual VGA path in order to quickly
      * get the surface. This is simple and fast, at the cost of accuracy.
      * Ideally, this should go through the VGA code and opportunistically pull
@@ -841,6 +880,8 @@ static void gl_render_frame(struct xemu_console *scon)
      * to the framebuffer, fall back to the VGA path.
      */
     GLuint tex = nv2a_get_framebuffer_surface();
+    unsigned int writes =
+        tex ? nv2a_get_scanout_writes() : qatomic_read(&vga_updates);
 
     ASSERT_NO_GL_ERROR();
 
@@ -875,7 +916,7 @@ static void gl_render_frame(struct xemu_console *scon)
     xemu_hud_update();
     xemu_main_loop_unlock();
 
-    xemu_hud_render();
+    bool ui_visible = xemu_hud_render();
     glFinish();
 
     if (release_surface_texture) {
@@ -883,6 +924,27 @@ static void gl_render_frame(struct xemu_console *scon)
     }
 
     nv2a_release_framebuffer_surface();
+
+    bool present =
+        !g_config.display.window.present_only_new_frames ||
+        present_needed(release_surface_texture, flips, writes, ui_visible);
+
+    if (!present) {
+#ifdef _WIN32
+        if (win32_dxgi_present_is_active()) {
+            /* As after win32_dxgi_present_end_frame() */
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+#endif
+        /* Wait for the next guest frame instead of the vertical refresh */
+        const SDL_DisplayMode *mode = SDL_GetCurrentDisplayMode(
+            SDL_GetDisplayForWindow(scon->real_window));
+        nv2a_wait_for_flip(flips, mode && mode->refresh_rate > 0 ?
+                                      1000 / mode->refresh_rate :
+                                      16);
+        qatomic_set(&rendering, false);
+        return;
+    }
 
 #ifdef _WIN32
     if (win32_dxgi_present_is_active()) {
@@ -1152,8 +1214,15 @@ static void display_early_init(DisplayOptions *o)
     xemu_hud_init(m_window, m_context);
 }
 
+static void gl_update(DisplayChangeListener *dcl, int x, int y, int w, int h)
+{
+    qatomic_inc(&vga_updates);
+    nv2a_wake_flip_waiters();
+}
+
 static const DisplayChangeListenerOps dcl_gl_ops = {
     .dpy_name                = "xemu-gl",
+    .dpy_gfx_update          = gl_update,
     .dpy_gfx_switch          = gl_switch,
     .dpy_gfx_check_format    = xb_console_gl_check_format,
     .dpy_mouse_set           = mouse_warp,
