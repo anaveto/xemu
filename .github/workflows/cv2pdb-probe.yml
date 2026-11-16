@@ -1,7 +1,7 @@
 name: cv2pdb probe
-# Test only (bugfixes session, 2026-11-16): cv2pdb 0.52 dies with 0xC0000094 (integer divide by zero) on the arm64
-# release build of 696837b (run 43782302746). Second probe: cv2pdb 0.53 and 0.54 on the same build and on 3b0786a's
-# (run 43777020945), and the faulting instruction and stack of 0.52 under cdb.
+# Test only (bugfixes session, 2026-11-16), probe 3: do cv2pdb 0.54's PDBs load? Converts the Windows builds of
+# 696837b (run 43782302746) with 0.54, then lets cdb load the converted xemu.exe as an image with the PDB and
+# resolve known functions.
 on:
   push:
     branches: [ci/cv2pdb-probe]
@@ -15,27 +15,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build: [{ tag: fail, run: '43782302746' }, { tag: pass, run: '43777020945' }]
+        art: [xemu-windows-arm64-release, xemu-windows-x86_64-release, xemu-windows-arm64-debug, xemu-windows-x86_64-debug]
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
-        with: { name: xemu-windows-arm64-release, path: dist, run-id: '${{ matrix.build.run }}', github-token: '${{ github.token }}' }
-      - name: cv2pdb 0.52, 0.53, 0.54
+        with: { name: '${{ matrix.art }}', path: dist, run-id: '43782302746', github-token: '${{ github.token }}' }
+      - name: cv2pdb 0.54, then symbols through cdb
         shell: pwsh
         run: |
-          (Get-FileHash dist/xemu.exe).Hash
-          foreach ($v in '0.52', '0.53', '0.54') {
-            Invoke-WebRequest -Uri "https://github.com/rainers/cv2pdb/releases/download/v$v/cv2pdb-$v.zip" -OutFile "cv2pdb-$v.zip"
-            7z x "-ocv2pdb-$v" -y "cv2pdb-$v.zip" | Out-Null
-            Copy-Item dist/xemu.exe "x$v.exe"
-            & "./cv2pdb-$v/cv2pdb64.exe" "x$v.exe" *> "out-$v.txt"
-            "cv2pdb ${v}: exit $LASTEXITCODE, pdb $((Get-Item "x$v.pdb" -ErrorAction SilentlyContinue).Length) bytes, output: $(Get-Content "out-$v.txt")"
-          }
+          Invoke-WebRequest -Uri "https://github.com/rainers/cv2pdb/releases/download/v0.54/cv2pdb-0.54.zip" -OutFile "cv2pdb.zip"
+          7z x -ocv2pdb -y cv2pdb.zip | Out-Null
+          cd dist
+          & ../cv2pdb/cv2pdb64.exe xemu.exe *> ../cv2pdb-out.txt
+          "cv2pdb 0.54: exit $LASTEXITCODE, $((Get-Content ../cv2pdb-out.txt | Measure-Object -Line).Lines) lines of output"
+          Get-ChildItem xemu.exe, xemu.pdb | Format-Table Name, Length
+          $cdb = "C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe"
+          & $cdb -z "$PWD\xemu.exe" -y "$PWD" -c ".symopt+ 0x40; .reload /f xemu.exe; lm v m xemu; x xemu!main; x xemu!gl_render_frame; x xemu!xemu_hud_render; x xemu!pgraph_*flip*; q" 2>&1 | Select-String -Pattern "xemu|PDB|pdb|Symbol|error|ERROR" | Select-Object -First 40
           exit 0
-      - name: cv2pdb 0.52 under cdb
-        shell: pwsh
-        run: |
-          $cdb = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe" -ErrorAction SilentlyContinue
-          if (-not $cdb) { "no cdb on this image"; exit 0 }
-          Copy-Item dist/xemu.exe xc.exe
-          & $cdb.FullName -g -G -o -c "r; u @rip-0x30 L16; k 20; lm m cv2pdb64; q" "./cv2pdb-0.52/cv2pdb64.exe" xc.exe 2>&1 | Select-Object -Last 80
-          exit 0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with: { name: 'pdb054-${{ matrix.art }}', path: 'dist/xemu.pdb', retention-days: 7 }
