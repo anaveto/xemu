@@ -225,6 +225,8 @@ void pgraph_init(NV2AState *d)
     qemu_event_init(&pg->sync_complete, false);
     qemu_event_init(&pg->flush_complete, false);
     qemu_cond_init(&pg->framebuffer_released);
+    qemu_mutex_init(&pg->flip_lock);
+    qemu_cond_init(&pg->flip_cond);
     qemu_event_init(&pg->renderer_switch_complete, false);
     pg->renderer_switch_phase = PGRAPH_RENDERER_SWITCH_PHASE_IDLE;
 
@@ -399,6 +401,44 @@ void nv2a_release_framebuffer_surface(void)
     pg->framebuffer_in_use = false;
     qemu_cond_broadcast(&pg->framebuffer_released);
     qemu_mutex_unlock(&pg->renderer_lock);
+}
+
+void pgraph_count_flip(NV2AState *d)
+{
+    PGRAPHState *pg = &d->pgraph;
+
+    qemu_mutex_lock(&pg->flip_lock);
+    pg->flip_count++;
+    qemu_cond_broadcast(&pg->flip_cond);
+    qemu_mutex_unlock(&pg->flip_lock);
+}
+
+unsigned int nv2a_get_scanout_writes(void)
+{
+    return g_nv2a->pgraph.scanout_writes;
+}
+
+void nv2a_wake_flip_waiters(void)
+{
+    PGRAPHState *pg = &g_nv2a->pgraph;
+
+    qemu_mutex_lock(&pg->flip_lock);
+    qemu_cond_broadcast(&pg->flip_cond);
+    qemu_mutex_unlock(&pg->flip_lock);
+}
+
+unsigned int nv2a_wait_for_flip(unsigned int count, int timeout_ms)
+{
+    PGRAPHState *pg = &g_nv2a->pgraph;
+
+    qemu_mutex_lock(&pg->flip_lock);
+    if (pg->flip_count == count && timeout_ms > 0) {
+        qemu_cond_timedwait(&pg->flip_cond, &pg->flip_lock, timeout_ms);
+    }
+    count = pg->flip_count;
+    qemu_mutex_unlock(&pg->flip_lock);
+
+    return count;
 }
 
 void nv2a_set_surface_scale_factor(unsigned int scale)
