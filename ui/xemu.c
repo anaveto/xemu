@@ -925,9 +925,9 @@ static void gl_render_frame(struct xemu_console *scon, bool redraw)
     xemu_hud_update();
     xemu_main_loop_unlock();
 
-    bool ui_visible = xemu_hud_end_frame();
+    xemu_hud_end_frame();
     bool present =
-        !only_new || present_needed(vga, flips, writes, ui_visible, true);
+        !only_new || present_needed(vga, flips, writes, false, true);
 
     if (present) {
 #ifdef _WIN32
