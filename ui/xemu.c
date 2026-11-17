@@ -1149,7 +1149,8 @@ static void gl_render_frame(struct xemu_console *scon, bool redraw)
             SDL_GetDisplayForWindow(scon->real_window));
         int wait_ms =
             mode && mode->refresh_rate > 0 ? 1000 / mode->refresh_rate : 16;
-        nv2a_wait_for_flip(flips, write_pending ? 1 : wait_ms);
+        const char *fs_settle = getenv("XEMU_FS_SETTLE_MS");
+        nv2a_wait_for_flip(flips, write_pending ? (fs_settle ? atoi(fs_settle) : 1) : wait_ms);
         qatomic_set(&rendering, false);
         return;
     }
