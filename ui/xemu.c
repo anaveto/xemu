@@ -858,7 +858,8 @@ static void flipstats_pass(bool vga, bool present, unsigned int flips,
     static int enabled = -1;
     static int64_t t0, last_present, last_press, inc_t, inclat_sum, inclat_max;
     static unsigned int last_inc, inclat_n;
-    static unsigned int pw, wd[4], wd16_sum;
+    static unsigned int pw, wd[4], wd16_sum, inc_p, ilat_n, dlat_n, dw;
+    static int64_t ilat_sum, ilat_max, dlat_sum, dlat_max;
     static int frame_writes = -1;
     static unsigned int passes, vga_passes, presents, ui_passes, presses;
     static int64_t max_gap, lat_sum, lat_max, close_t, close_lat;
@@ -903,6 +904,24 @@ static void flipstats_pass(bool vga, bool present, unsigned int flips,
         pw = writes;
     }
     if (present) {
+        int64_t now_us = qemu_clock_get_us(QEMU_CLOCK_REALTIME);
+        unsigned int inc_c = qatomic_read(&nv2a_fs_inc);
+        if (inc_c != inc_p) {
+            int64_t l = now_us - qatomic_read(&nv2a_fs_inc_us);
+            ilat_sum += l;
+            ilat_max = MAX(ilat_max, l);
+            ilat_n++;
+            inc_p = inc_c;
+        }
+        if (!vga && writes != dw) {
+            int64_t l = now_us - qatomic_read(&nv2a_fs_draw_us);
+            dlat_sum += l;
+            dlat_max = MAX(dlat_max, l);
+            dlat_n++;
+        }
+        dw = writes;
+    }
+    if (present) {
         presents++;
         if (inc_t) {
             inclat_sum += now - inc_t;
@@ -943,14 +962,20 @@ static void flipstats_pass(bool vga, bool present, unsigned int flips,
                 "maxgap=%" PRId64 " presses=%u lat_avg=%" PRId64
                 " lat_max=%" PRId64 " closelat=%" PRId64 " uicpu_us=%" PRId64
                 " inclat_avg=%" PRId64 " inclat_max=%" PRId64
-                " wd0=%u wd1=%u wd16=%u wdF=%u wd16_avg=%u\n",
+                " wd0=%u wd1=%u wd16=%u wdF=%u wd16_avg=%u"
+                " incus_avg=%" PRId64 " incus_max=%" PRId64
+                " drawus_avg=%" PRId64 " drawus_max=%" PRId64 "\n",
                 now, now - t0, inc - inc0, startw - startw0, startc - startc0,
                 pvb - pvb0, flips - flips0, writes - writes0, passes, vga_passes,
                 ui_passes,
                 presents, max_gap, presses, presses ? lat_sum / presses : 0,
                 lat_max, close_lat, cpu - cpu0,
                 inclat_n ? inclat_sum / inclat_n : 0, inclat_max,
-                wd[0], wd[1], wd[2], wd[3], wd[2] ? wd16_sum / wd[2] : 0);
+                wd[0], wd[1], wd[2], wd[3], wd[2] ? wd16_sum / wd[2] : 0,
+                ilat_n ? ilat_sum / ilat_n : 0, ilat_max,
+                dlat_n ? dlat_sum / dlat_n : 0, dlat_max);
+        ilat_sum = ilat_max = dlat_sum = dlat_max = 0;
+        ilat_n = dlat_n = 0;
         memset(wd, 0, sizeof(wd));
         wd16_sum = 0;
         inclat_sum = inclat_max = 0;
