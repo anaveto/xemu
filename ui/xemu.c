@@ -1058,9 +1058,18 @@ static void gl_render_frame(struct xemu_console *scon, bool redraw)
      * the guest code isn't using HW accelerated rendering, but just blitting
      * to the framebuffer, fall back to the VGA path.
      */
+    static FILE *fs_trace;
+    static int fs_trace_on = -1;
+    if (fs_trace_on < 0) {
+        const char *tp = getenv("XEMU_FS_TRACE");
+        fs_trace = tp ? fopen(tp, "w") : NULL;
+        fs_trace_on = fs_trace != NULL;
+    }
+    int64_t fs_t0 = fs_trace_on ? qemu_clock_get_us(QEMU_CLOCK_REALTIME) : 0;
     GLuint tex = nv2a_get_framebuffer_surface();
     unsigned int writes =
         tex ? nv2a_get_scanout_writes() : qatomic_read(&vga_updates);
+    int64_t fs_t1 = fs_trace_on ? qemu_clock_get_us(QEMU_CLOCK_REALTIME) : 0;
 
     ASSERT_NO_GL_ERROR();
 
@@ -1097,6 +1106,10 @@ static void gl_render_frame(struct xemu_console *scon, bool redraw)
              fs_present_v2(release_surface_texture, flips, writes, ui_visible) :
              present_needed(release_surface_texture, flips, writes, ui_visible));
     flipstats_pass(release_surface_texture, present, flips, writes);
+    if (fs_trace_on) {
+        fprintf(fs_trace, "%" PRId64 " %" PRId64 " %u %u %d %d\n", fs_t0, fs_t1,
+                writes, flips, present, write_pending);
+    }
 
     if (present) {
 #ifdef _WIN32
