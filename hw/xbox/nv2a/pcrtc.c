@@ -22,6 +22,7 @@
 #include "nv2a_int.h"
 
 unsigned int nv2a_fs_inc, nv2a_fs_startw, nv2a_fs_startc, nv2a_fs_pvb;
+int64_t nv2a_fs_inc_us, nv2a_fs_draw_us;
 
 uint64_t pcrtc_read(void *opaque, hwaddr addr, unsigned int size)
 {
