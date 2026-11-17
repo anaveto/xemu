@@ -860,6 +860,8 @@ static void flipstats_pass(bool vga, bool present, unsigned int flips,
     static int enabled = -1;
     static int64_t t0, last_present, last_press, inc_t, inclat_sum, inclat_max;
     static unsigned int last_inc, inclat_n;
+    static unsigned int pw, wd[4], wd16_sum;
+    static int frame_writes = -1;
     static unsigned int passes, vga_passes, presents, ui_passes, presses;
     static int64_t max_gap, lat_sum, lat_max, close_t, close_lat;
     static bool ui_was;
@@ -889,6 +891,19 @@ static void flipstats_pass(bool vga, bool present, unsigned int flips,
         inc_t = now;
     }
     last_inc = inc_now;
+    if (frame_writes < 0) {
+        const char *fw = getenv("XEMU_FS_FRAME_WRITES");
+        frame_writes = fw ? atoi(fw) : 400;
+    }
+    if (present && !vga) {
+        unsigned int d = writes - pw;
+        int b = writes < pw ? 3 : d == 0 ? 0 : d < 16 ? 1 : d < (unsigned)frame_writes ? 2 : 3;
+        wd[b]++;
+        if (b == 2) {
+            wd16_sum += d;
+        }
+        pw = writes;
+    }
     if (present) {
         presents++;
         if (inc_t) {
@@ -929,13 +944,17 @@ static void flipstats_pass(bool vga, bool present, unsigned int flips,
                 "startc=%u pvb=%u flips=%u sw=%u passes=%u vga=%u ui=%u presents=%u "
                 "maxgap=%" PRId64 " presses=%u lat_avg=%" PRId64
                 " lat_max=%" PRId64 " closelat=%" PRId64 " uicpu_us=%" PRId64
-                " inclat_avg=%" PRId64 " inclat_max=%" PRId64 "\n",
+                " inclat_avg=%" PRId64 " inclat_max=%" PRId64
+                " wd0=%u wd1=%u wd16=%u wdF=%u wd16_avg=%u\n",
                 now, now - t0, inc - inc0, startw - startw0, startc - startc0,
                 pvb - pvb0, flips - flips0, writes - writes0, passes, vga_passes,
                 ui_passes,
                 presents, max_gap, presses, presses ? lat_sum / presses : 0,
                 lat_max, close_lat, cpu - cpu0,
-                inclat_n ? inclat_sum / inclat_n : 0, inclat_max);
+                inclat_n ? inclat_sum / inclat_n : 0, inclat_max,
+                wd[0], wd[1], wd[2], wd[3], wd[2] ? wd16_sum / wd[2] : 0);
+        memset(wd, 0, sizeof(wd));
+        wd16_sum = 0;
         inclat_sum = inclat_max = 0;
         inclat_n = 0;
         inc0 = inc; startw0 = startw; startc0 = startc; pvb0 = pvb;
