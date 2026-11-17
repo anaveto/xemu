@@ -31,6 +31,9 @@ unsigned int nv2a_get_scanout_writes(void);
 /* Test only (flipstats): guest display events */
 extern unsigned int nv2a_fs_inc, nv2a_fs_startw, nv2a_fs_startc, nv2a_fs_pvb;
 extern int64_t nv2a_fs_inc_us, nv2a_fs_draw_us;
+/* CPU accesses to surfaces that waited for pgraph.lock, and the time waited */
+extern unsigned int nv2a_fs_lw_n;
+extern int64_t nv2a_fs_lw_ns;
 void nv2a_set_surface_scale_factor(unsigned int scale);
 unsigned int nv2a_get_surface_scale_factor(void);
 const uint8_t *nv2a_get_dac_palette(void);

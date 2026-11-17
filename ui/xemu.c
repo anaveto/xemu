@@ -867,7 +867,8 @@ static void flipstats_pass(bool vga, bool present, unsigned int flips,
     static int64_t max_gap, lat_sum, lat_max, close_t, close_lat;
     static bool ui_was;
     static unsigned int inc0, startw0, startc0, pvb0, flips0, writes0;
-    static int64_t cpu0;
+    static int64_t cpu0, lw_ns0;
+    static unsigned int lw_n0;
 
     if (enabled < 0) {
         enabled = getenv("XEMU_FLIPSTATS") != NULL;
@@ -950,6 +951,8 @@ static void flipstats_pass(bool vga, bool present, unsigned int flips,
         unsigned int startw = qatomic_read(&nv2a_fs_startw);
         unsigned int startc = qatomic_read(&nv2a_fs_startc);
         unsigned int pvb = qatomic_read(&nv2a_fs_pvb);
+        unsigned int lw_n = qatomic_read(&nv2a_fs_lw_n);
+        int64_t lw_ns = qatomic_read(&nv2a_fs_lw_ns);
         int64_t cpu = 0;
 #ifdef RUSAGE_THREAD
         struct rusage ru;
@@ -966,7 +969,8 @@ static void flipstats_pass(bool vga, bool present, unsigned int flips,
                 " inclat_avg=%" PRId64 " inclat_max=%" PRId64
                 " wd0=%u wd1=%u wd16=%u wdF=%u wd16_avg=%u"
                 " incus_avg=%" PRId64 " incus_max=%" PRId64
-                " drawus_avg=%" PRId64 " drawus_max=%" PRId64 "\n",
+                " drawus_avg=%" PRId64 " drawus_max=%" PRId64
+                " lw_n=%u lw_us=%" PRId64 "\n",
                 now, now - t0, inc - inc0, startw - startw0, startc - startc0,
                 pvb - pvb0, flips - flips0, writes - writes0, passes, vga_passes,
                 ui_passes,
@@ -975,7 +979,9 @@ static void flipstats_pass(bool vga, bool present, unsigned int flips,
                 inclat_n ? inclat_sum / inclat_n : 0, inclat_max,
                 wd[0], wd[1], wd[2], wd[3], wd[2] ? wd16_sum / wd[2] : 0,
                 ilat_n ? ilat_sum / ilat_n : 0, ilat_max,
-                dlat_n ? dlat_sum / dlat_n : 0, dlat_max);
+                dlat_n ? dlat_sum / dlat_n : 0, dlat_max,
+                lw_n - lw_n0, (lw_ns - lw_ns0) / 1000);
+        lw_n0 = lw_n; lw_ns0 = lw_ns;
         ilat_sum = ilat_max = dlat_sum = dlat_max = 0;
         ilat_n = dlat_n = 0;
         memset(wd, 0, sizeof(wd));

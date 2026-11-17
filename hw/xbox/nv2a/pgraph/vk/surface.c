@@ -24,6 +24,7 @@
  */
 
 #include "hw/xbox/nv2a/nv2a_int.h"
+#include "qemu/timer.h"
 #include "hw/xbox/nv2a/pgraph/swizzle.h"
 #include "qemu/compiler.h"
 #include "ui/xemu-settings.h"
@@ -561,7 +562,12 @@ static void surface_access_callback(void *opaque, MemoryRegion *mr, hwaddr addr,
                                     hwaddr len, bool write)
 {
     NV2AState *d = (NV2AState *)opaque;
-    qemu_mutex_lock(&d->pgraph.lock);
+    if (qemu_mutex_trylock(&d->pgraph.lock)) {
+        int64_t fs_lw = qemu_clock_get_ns(QEMU_CLOCK_REALTIME);
+        qemu_mutex_lock(&d->pgraph.lock);
+        qatomic_add(&nv2a_fs_lw_ns, qemu_clock_get_ns(QEMU_CLOCK_REALTIME) - fs_lw);
+        qatomic_inc(&nv2a_fs_lw_n);
+    }
 
     PGRAPHVkState *r = d->pgraph.vk_renderer_state;
     bool wait_for_downloads = false;
