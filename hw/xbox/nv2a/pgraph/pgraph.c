@@ -115,6 +115,7 @@ void pgraph_write(void *opaque, hwaddr addr, uint64_t val, unsigned int size)
                                    NV_PGRAPH_SURFACE_MODULO_3D) );
             nv2a_profile_increment();
             qatomic_inc(&nv2a_fs_inc);
+            qatomic_set(&nv2a_fs_inc_us, qemu_clock_get_us(QEMU_CLOCK_REALTIME));
             pfifo_kick(d);
         }
         break;

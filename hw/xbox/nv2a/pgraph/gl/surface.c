@@ -109,6 +109,8 @@ void pgraph_gl_set_surface_dirty(PGRAPHState *pg, bool color, bool zeta)
         if (color) {
             qatomic_set(&r->color_binding->writes,
                         qatomic_inc_fetch(&pg->write_seq));
+            qatomic_set(&nv2a_fs_draw_us,
+                        qemu_clock_get_us(QEMU_CLOCK_REALTIME));
         }
         r->color_binding->frame_time = pg->frame_time;
         r->color_binding->cleared = false;
