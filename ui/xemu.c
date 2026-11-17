@@ -1053,6 +1053,14 @@ static void gl_render_frame(struct xemu_console *scon, bool redraw)
     bool release_surface_texture = false;
 
     unsigned int flips = nv2a_wait_for_flip(0, 0);
+    static FILE *fs_trace;
+    static int fs_trace_on = -1;
+    if (fs_trace_on < 0) {
+        const char *tp = getenv("XEMU_FS_TRACE");
+        fs_trace = tp ? fopen(tp, "w") : NULL;
+        fs_trace_on = fs_trace != NULL;
+    }
+    int64_t fs_t0 = fs_trace_on ? qemu_clock_get_us(QEMU_CLOCK_REALTIME) : 0;
     bool only_new = g_config.display.window.present_only_new_frames && !redraw;
     unsigned int writes = 0;
     bool vga = only_new && !nv2a_peek_scanout_writes(&writes);
@@ -1075,6 +1083,7 @@ static void gl_render_frame(struct xemu_console *scon, bool redraw)
     if (sync && tex && !vga) {
         writes = nv2a_get_scanout_writes();
     }
+    int64_t fs_t1 = fs_trace_on ? qemu_clock_get_us(QEMU_CLOCK_REALTIME) : 0;
 
     ASSERT_NO_GL_ERROR();
 
@@ -1111,6 +1120,10 @@ static void gl_render_frame(struct xemu_console *scon, bool redraw)
              fs_present_v2(vga, flips, writes, ui_visible) :
              present_needed(vga, flips, writes, ui_visible, true));
     flipstats_pass(release_surface_texture, present, flips, writes);
+    if (fs_trace_on) {
+        fprintf(fs_trace, "%" PRId64 " %" PRId64 " %u %u %d %d %d\n", fs_t0,
+                fs_t1, writes, flips, present, write_pending, sync);
+    }
 
     if (present) {
 #ifdef _WIN32
