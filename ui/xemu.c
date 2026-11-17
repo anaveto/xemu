@@ -1122,6 +1122,8 @@ static void gl_render_frame(struct xemu_console *scon, bool redraw)
             nv2a_wait_for_flip(flips, mode && mode->refresh_rate > 0 ?
                                           1000 / mode->refresh_rate :
                                           16);
+        } else if (getenv("XEMU_FS_DEFER_MS")) {
+            nv2a_wait_for_flip(flips, atoi(getenv("XEMU_FS_DEFER_MS")));
         }
         qatomic_set(&rendering, false);
         return;
